@@ -1,0 +1,46 @@
+CHANNELS = [
+    {
+        "id": "dormir",
+        "name": "Buenas Noches, Mundo",
+        "tagline": "Historias originales para bajar el ritmo y dormir",
+        "language": "es-AR",
+        "format": "long+shorts",
+        "cadence": {"long_per_week": 3, "shorts_per_week": 7},
+        "voice": "calida, pausada, adulta, sin infantilizar",
+        "visual": "ilustracion nocturna cinematografica, movimientos lentos, paleta profunda",
+        "pillars": ["fantasia tranquila", "viajes imposibles", "misterios amables", "relatos de naturaleza"],
+        "safety": ["sin sobresaltos", "sin violencia grafica", "sin promesas medicas sobre el sueno"],
+    },
+    {
+        "id": "matematica",
+        "name": "Mate Exacto",
+        "tagline": "Problemas clasicos explicados con intuicion visual",
+        "language": "es-AR",
+        "format": "long+shorts",
+        "cadence": {"long_per_week": 2, "shorts_per_week": 5},
+        "voice": "clara, energica, precisa, cercana",
+        "visual": "pizarra digital limpia, diagramas geometricos, animacion paso a paso",
+        "pillars": ["algebra", "geometria", "probabilidad", "logica", "problemas olimpicos accesibles"],
+        "safety": ["mostrar procedimiento", "verificar resultados", "evitar resolver examenes activos identificables"],
+    },
+    {
+        "id": "archivo",
+        "name": "Archivo Insolito",
+        "tagline": "Historias reales, inventos, accidentes y decisiones que cambiaron algo",
+        "language": "es-AR",
+        "format": "long+shorts",
+        "cadence": {"long_per_week": 2, "shorts_per_week": 7},
+        "voice": "narrativa, intrigante, sobria",
+        "visual": "archivo documental, mapas, recortes, recreaciones estilizadas claramente identificables",
+        "pillars": ["historia de tecnologia", "exploracion", "infraestructura", "errores famosos", "inventos"],
+        "safety": ["separar hechos de recreaciones", "citar fuentes en descripcion", "no inventar citas"],
+    },
+]
+
+BREAKING_NEWS_TEMPLATE = {
+    "id": "actualidad",
+    "name": "Contexto Ahora",
+    "enabled": False,
+    "reason_disabled": "Requiere fuentes en tiempo real, doble verificacion y credenciales externas antes de publicar autonomamente.",
+    "publication_rule": "Solo publicar con al menos 2 fuentes independientes, una fuente primaria cuando exista y confidence >= 0.90.",
+}
