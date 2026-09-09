@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import subprocess
+import textwrap
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
@@ -70,6 +71,10 @@ def _balanced_chunks(text: str, count: int) -> list[str]:
     return chunks
 
 
+def _subtitle_block(text: str) -> str:
+    return "\n".join(textwrap.wrap(text.strip(), width=34)[:3])
+
+
 def _motion_filter(index: int, frames: int) -> str:
     variants = [
         "z='min(zoom+0.0014,1.14)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
@@ -102,13 +107,13 @@ def render_scene_fastcuts(
     for shot_index in range(shot_count):
         shot = out_dir / f"scene-{scene_index:02d}-shot-{shot_index+1:02d}.mp4"
         subtitle_file = out_dir / f"scene-{scene_index:02d}-shot-{shot_index+1:02d}.txt"
-        subtitle_file.write_text(subtitle_chunks[shot_index], encoding="utf-8")
+        subtitle_file.write_text(_subtitle_block(subtitle_chunks[shot_index]), encoding="utf-8")
         frames = max(1, round(shot_duration * VIDEO_FPS))
         motion = _motion_filter(scene_index + shot_index, frames)
         drawtext = (
             f"drawtext=fontfile={FONT_BOLD}:textfile={subtitle_file}:fontcolor=white:fontsize=42:"
-            "borderw=5:bordercolor=black:box=1:boxcolor=black@0.34:boxborderw=14:"
-            "x=(w-text_w)/2:y=h-text_h-58"
+            "borderw=5:bordercolor=black:box=1:boxcolor=black@0.38:boxborderw=14:"
+            "x=(w-text_w)/2:y=h-text_h-48:line_spacing=8"
         )
         vf = f"zoompan={motion}:d={frames}:s=1280x720:fps={VIDEO_FPS},{drawtext},format=yuv420p"
         subprocess.run([
@@ -159,33 +164,31 @@ def make_extreme_thumbnail(base: Path, text: str, dest: Path) -> None:
     img = ImageEnhance.Contrast(img).enhance(1.55)
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle((0, 0, 1280, 720), fill=(0, 0, 0, 0))
     draw.ellipse((875, 65, 1240, 430), outline=(255, 235, 0), width=24)
     draw.polygon([(835, 525), (1160, 370), (1025, 610)], fill=(255, 40, 20))
 
     lines = _wrap_thumbnail_text(text, 2)
-    max_width = 930
-    max_height = 590
-    font_size = 160
-    while font_size > 70:
+    max_width = 1020
+    max_height = 620
+    font_size = 176
+    while font_size > 72:
         font = _font(font_size)
         boxes = [draw.textbbox((0, 0), line, font=font, stroke_width=10) for line in lines]
         widths = [b[2] - b[0] for b in boxes]
         heights = [b[3] - b[1] for b in boxes]
-        total_h = sum(heights) + max(0, len(lines) - 1) * 4
+        total_h = sum(heights) + max(0, len(lines) - 1) * 2
         if max(widths, default=0) <= max_width and total_h <= max_height:
             break
         font_size -= 6
 
     font = _font(font_size)
-    y = 40
+    y = 20
     for line_index, line in enumerate(lines):
         bbox = draw.textbbox((0, 0), line, font=font, stroke_width=11)
         h = bbox[3] - bbox[1]
-        shadow_xy = (45, y + 12)
-        draw.text(shadow_xy, line, font=font, fill=(0, 0, 0), stroke_width=14, stroke_fill=(0, 0, 0))
+        draw.text((45, y + 12), line, font=font, fill=(0, 0, 0), stroke_width=16, stroke_fill=(0, 0, 0))
         fill = (255, 235, 0) if line_index == 0 else (255, 255, 255)
-        draw.text((30, y), line, font=font, fill=fill, stroke_width=11, stroke_fill=(0, 0, 0))
-        y += h + 8
+        draw.text((24, y), line, font=font, fill=fill, stroke_width=12, stroke_fill=(0, 0, 0))
+        y += h + 2
 
     img.save(dest, quality=96)
