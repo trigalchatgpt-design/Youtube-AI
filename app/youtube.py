@@ -125,6 +125,49 @@ def channel_info() -> dict:
     return response.json()
 
 
+def uploads_playlist_id() -> str:
+    data = channel_info()
+    items = data.get("items") or []
+    if not items:
+        raise RuntimeError("No YouTube channel is connected")
+    return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+
+def find_uploaded_video_by_title(title: str, max_items: int = 100) -> dict | None:
+    token = access_token()
+    playlist_id = uploads_playlist_id()
+    page_token: str | None = None
+    seen = 0
+    while seen < max_items:
+        params = {
+            "part": "snippet,contentDetails",
+            "playlistId": playlist_id,
+            "maxResults": min(50, max_items - seen),
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        response = httpx.get(
+            f"{YOUTUBE_API}/playlistItems",
+            params=params,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        )
+        response.raise_for_status()
+        data = response.json()
+        for item in data.get("items", []):
+            if item.get("snippet", {}).get("title", "").strip() == title.strip():
+                return {
+                    "video_id": item.get("contentDetails", {}).get("videoId"),
+                    "title": item.get("snippet", {}).get("title"),
+                }
+        batch = len(data.get("items", []))
+        seen += batch
+        page_token = data.get("nextPageToken")
+        if not page_token or batch == 0:
+            break
+    return None
+
+
 def upload_video(video_path: Path, title: str, description: str, tags: list[str] | None = None, privacy_status: str = "private", category_id: str = "27") -> dict:
     token = access_token()
     size = video_path.stat().st_size
