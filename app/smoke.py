@@ -26,7 +26,7 @@ def _font(size: int):
 def _make_thumbnail(base_image: Path, text: str, dest: Path) -> None:
     img = Image.open(base_image).convert("RGB").resize((1280, 720))
     draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle((60, 500, 1220, 660), radius=26, fill=(0, 0, 0, 180))
+    draw.rounded_rectangle((60, 500, 1220, 660), radius=26, fill=(0, 0, 0))
     draw.text((95, 535), text.upper()[:42], font=_font(58), fill=(255, 255, 255))
     img.save(dest, quality=94)
 
