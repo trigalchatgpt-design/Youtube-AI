@@ -16,6 +16,10 @@ MARKER = OUT / "archivo-private-smoke.json"
 CHANNEL_MAP = {c["id"]: c for c in CHANNELS}
 
 
+def _log(stage: str) -> None:
+    print(f"PRIVATE_SMOKE_STAGE {stage}", flush=True)
+
+
 def _font(size: int):
     for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]:
         if Path(p).exists():
@@ -45,13 +49,16 @@ def _render_video(image_path: Path, audio_path: Path, dest: Path) -> None:
 
 
 def run_private_smoke() -> dict:
+    _log("start")
     if MARKER.exists():
+        _log("marker-hit")
         return json.loads(MARKER.read_text(encoding="utf-8"))
     if not STACK.enabled:
         raise RuntimeError("OPENAI_API_KEY is not configured")
 
     OUT.mkdir(parents=True, exist_ok=True)
     channel = CHANNEL_MAP["archivo"]
+    _log("text")
     package = STACK.generate_smoke_package(channel)
 
     image_path = OUT / "scene.png"
@@ -59,12 +66,15 @@ def run_private_smoke() -> dict:
     video_path = OUT / "private-smoke.mp4"
     thumb_path = OUT / "thumbnail.jpg"
 
+    _log("image")
     STACK.generate_image(package["image_prompt"], image_path)
+    _log("voice")
     STACK.synthesize_speech(
         package["script"],
         audio_path,
         "Voz documental sobria, intrigante y natural en espanol rioplatense. Ritmo medio, diccion clara, sin dramatizacion excesiva.",
     )
+    _log("render")
     _render_video(image_path, audio_path, video_path)
     _make_thumbnail(image_path, package["thumbnail_text"], thumb_path)
 
@@ -72,6 +82,7 @@ def run_private_smoke() -> dict:
         "PRUEBA TECNICA PRIVADA de YouTube AI Studio para Archivo insolito.\n\n"
         "Este video usa voz generada por IA y fue creado para validar el pipeline tecnico antes de producir episodios reales."
     )
+    _log("youtube-upload")
     uploaded = upload_video(
         video_path,
         title=f"[PRUEBA PRIVADA] {package['title']}",
@@ -83,6 +94,7 @@ def run_private_smoke() -> dict:
     video_id = uploaded.get("id")
     thumb_result = None
     if video_id:
+        _log("thumbnail")
         try:
             thumb_result = set_thumbnail(video_id, thumb_path)
         except Exception as exc:
@@ -97,4 +109,5 @@ def run_private_smoke() -> dict:
         "mode": package.get("mode"),
     }
     MARKER.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    _log("done")
     return result
