@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont
+
+from .channels import CHANNELS
+from .openai_stack import STACK
+from .youtube import upload_video, set_thumbnail
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "outputs" / "smoke"
+MARKER = OUT / "archivo-private-smoke.json"
+CHANNEL_MAP = {c["id"]: c for c in CHANNELS}
+
+
+def _font(size: int):
+    for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]:
+        if Path(p).exists():
+            return ImageFont.truetype(p, size=size)
+    return ImageFont.load_default()
+
+
+def _make_thumbnail(base_image: Path, text: str, dest: Path) -> None:
+    img = Image.open(base_image).convert("RGB").resize((1280, 720))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((60, 500, 1220, 660), radius=26, fill=(0, 0, 0, 180))
+    draw.text((95, 535), text.upper()[:42], font=_font(58), fill=(255, 255, 255))
+    img.save(dest, quality=94)
+
+
+def _render_video(image_path: Path, audio_path: Path, dest: Path) -> None:
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loop", "1", "-i", str(image_path), "-i", str(audio_path),
+            "-vf", "scale=1280:720,format=yuv420p", "-c:v", "libx264", "-tune", "stillimage",
+            "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(dest),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def run_private_smoke() -> dict:
+    if MARKER.exists():
+        return json.loads(MARKER.read_text(encoding="utf-8"))
+    if not STACK.enabled:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    channel = CHANNEL_MAP["archivo"]
+    package = STACK.generate_smoke_package(channel)
+
+    image_path = OUT / "scene.png"
+    audio_path = OUT / "voice.mp3"
+    video_path = OUT / "private-smoke.mp4"
+    thumb_path = OUT / "thumbnail.jpg"
+
+    STACK.generate_image(package["image_prompt"], image_path)
+    STACK.synthesize_speech(
+        package["script"],
+        audio_path,
+        "Voz documental sobria, intrigante y natural en espanol rioplatense. Ritmo medio, diccion clara, sin dramatizacion excesiva.",
+    )
+    _render_video(image_path, audio_path, video_path)
+    _make_thumbnail(image_path, package["thumbnail_text"], thumb_path)
+
+    description = (
+        "PRUEBA TECNICA PRIVADA de YouTube AI Studio para Archivo insolito.\n\n"
+        "Este video usa voz generada por IA y fue creado para validar el pipeline tecnico antes de producir episodios reales."
+    )
+    uploaded = upload_video(
+        video_path,
+        title=f"[PRUEBA PRIVADA] {package['title']}",
+        description=description,
+        tags=["prueba privada", "archivo insolito", "youtube ai studio"],
+        privacy_status="private",
+        category_id="27",
+    )
+    video_id = uploaded.get("id")
+    thumb_result = None
+    if video_id:
+        try:
+            thumb_result = set_thumbnail(video_id, thumb_path)
+        except Exception as exc:
+            thumb_result = {"warning": str(exc)}
+
+    result = {
+        "ok": True,
+        "video_id": video_id,
+        "privacy": "private",
+        "title": package["title"],
+        "thumbnail": thumb_result,
+        "mode": package.get("mode"),
+    }
+    MARKER.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    return result
