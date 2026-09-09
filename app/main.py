@@ -1,3 +1,5 @@
+import html
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
@@ -8,7 +10,7 @@ from .provider import ProviderStatus
 from .scheduler import start_scheduler
 from .youtube import authorization_url, exchange_code, channel_info
 
-app = FastAPI(title="YouTube AI Studio", version="0.4.0")
+app = FastAPI(title="YouTube AI Studio", version="0.4.1")
 
 @app.on_event("startup")
 def _startup():
@@ -19,7 +21,7 @@ class GenerateReq(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "youtube-ai-studio", "version": "0.4.0"}
+    return {"ok": True, "service": "youtube-ai-studio", "version": "0.4.1"}
 
 @app.get("/api/status")
 def provider_status():
@@ -56,8 +58,23 @@ def youtube_oauth_callback(code: str, state: str):
         result = exchange_code(code, state)
     except Exception as exc:
         raise HTTPException(400, f"OAuth failed: {exc}")
-    persisted = not bool(result.get("refresh_token"))
-    return f"<html><body style='font-family:system-ui;max-width:760px;margin:60px auto'><h1>YouTube conectado</h1><p>La autorizacion se completo.</p><p>Para automatizacion permanente, el refresh token debe quedar guardado como variable segura en Railway.</p><p>Ya podes cerrar esta ventana.</p></body></html>"
+
+    refresh_token = result.get("refresh_token") or ""
+    token_block = ""
+    if refresh_token:
+        escaped = html.escape(refresh_token, quote=True)
+        token_block = f"""
+        <div style='margin:24px 0;padding:18px;border:1px solid #ccc;border-radius:12px'>
+          <h2 style='margin-top:0'>Ultimo paso: guardar acceso permanente</h2>
+          <p>Copiá este valor completo y guardalo en Railway como <strong>YOUTUBE_REFRESH_TOKEN</strong>.</p>
+          <textarea readonly style='width:100%;min-height:120px;font-family:monospace;font-size:14px;padding:12px;box-sizing:border-box'>{escaped}</textarea>
+          <p style='font-size:14px;color:#555'>Este token es una credencial secreta. No lo pegues en chats ni lo compartas.</p>
+        </div>
+        """
+    else:
+        token_block = "<p>Google no devolvió un refresh token nuevo. Volvé a iniciar la conexión y aceptá el consentimiento completo.</p>"
+
+    return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>YouTube conectado</title></head><body style='font-family:system-ui;max-width:760px;margin:60px auto;padding:0 20px'><h1>YouTube conectado</h1><p>La autorización se completó correctamente.</p>{token_block}<p>Después de guardar la variable, volvé a ChatGPT y escribí <strong>token guardado</strong>.</p></body></html>"""
 
 @app.get("/api/youtube/channel")
 def youtube_channel():
@@ -71,4 +88,4 @@ def dashboard():
     status = ProviderStatus().as_dict()
     cards = "".join(f"<article><h2>{c['name']}</h2><p>{c['tagline']}</p><code>{c['id']}</code></article>" for c in CHANNELS)
     oauth = "<a href='/oauth/youtube/start'>Conectar YouTube</a>" if status['youtube_oauth_configured'] and not status['youtube_connected'] else ("YouTube conectado" if status['youtube_connected'] else "Faltan credenciales OAuth de Google")
-    return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>YouTube AI Studio</title><style>body{{font-family:system-ui;background:#111;color:#eee;max-width:1050px;margin:40px auto;padding:0 20px}}a{{color:#8ec5ff}}section{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}}article{{border:1px solid #444;border-radius:18px;padding:20px;background:#181818}}code{{background:#262626;padding:4px 7px;border-radius:6px}}.box{{margin:24px 0;padding:16px;background:#181818;border-radius:14px}}</style></head><body><h1>YouTube AI Studio</h1><p>Orquestador V0.4</p><div class='box'><strong>Estado:</strong><pre>{status}</pre><p>{oauth}</p></div><section>{cards}</section><div class='box'><strong>Contexto Ahora</strong><p>Desactivado hasta conectar fuentes en tiempo real y doble verificacion.</p></div></body></html>"""
+    return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>YouTube AI Studio</title><style>body{{font-family:system-ui;background:#111;color:#eee;max-width:1050px;margin:40px auto;padding:0 20px}}a{{color:#8ec5ff}}section{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}}article{{border:1px solid #444;border-radius:18px;padding:20px;background:#181818}}code{{background:#262626;padding:4px 7px;border-radius:6px}}.box{{margin:24px 0;padding:16px;background:#181818;border-radius:14px}}</style></head><body><h1>YouTube AI Studio</h1><p>Orquestador V0.4.1</p><div class='box'><strong>Estado:</strong><pre>{status}</pre><p>{oauth}</p></div><section>{cards}</section><div class='box'><strong>Contexto Ahora</strong><p>Desactivado hasta conectar fuentes en tiempo real y doble verificación.</p></div></body></html>"""
