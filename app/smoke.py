@@ -27,6 +27,23 @@ def _font(size: int):
     return ImageFont.load_default()
 
 
+def _prepare_frame(base_image: Path, dest: Path) -> None:
+    img = Image.open(base_image).convert("RGB")
+    src_w, src_h = img.size
+    target_ratio = 16 / 9
+    src_ratio = src_w / src_h
+    if src_ratio > target_ratio:
+        new_w = int(src_h * target_ratio)
+        left = (src_w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, src_h))
+    else:
+        new_h = int(src_w / target_ratio)
+        top = (src_h - new_h) // 2
+        img = img.crop((0, top, src_w, top + new_h))
+    img = img.resize((1280, 720), Image.Resampling.LANCZOS)
+    img.save(dest, quality=90, optimize=True)
+
+
 def _make_thumbnail(base_image: Path, text: str, dest: Path) -> None:
     img = Image.open(base_image).convert("RGB").resize((1280, 720))
     draw = ImageDraw.Draw(img)
@@ -35,12 +52,16 @@ def _make_thumbnail(base_image: Path, text: str, dest: Path) -> None:
     img.save(dest, quality=94)
 
 
-def _render_video(image_path: Path, audio_path: Path, dest: Path) -> None:
+def _render_video(frame_path: Path, audio_path: Path, dest: Path) -> None:
     subprocess.run(
         [
-            "ffmpeg", "-y", "-loop", "1", "-i", str(image_path), "-i", str(audio_path),
-            "-vf", "scale=1280:720,format=yuv420p", "-c:v", "libx264", "-tune", "stillimage",
-            "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(dest),
+            "ffmpeg", "-y",
+            "-loop", "1", "-framerate", "1", "-i", str(frame_path),
+            "-i", str(audio_path),
+            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "stillimage",
+            "-threads", "1", "-r", "1", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart",
+            str(dest),
         ],
         check=True,
         stdout=subprocess.DEVNULL,
@@ -62,12 +83,14 @@ def run_private_smoke() -> dict:
     package = STACK.generate_smoke_package(channel)
 
     image_path = OUT / "scene.png"
+    frame_path = OUT / "frame.jpg"
     audio_path = OUT / "voice.mp3"
     video_path = OUT / "private-smoke.mp4"
     thumb_path = OUT / "thumbnail.jpg"
 
     _log("image")
     STACK.generate_image(package["image_prompt"], image_path)
+    _prepare_frame(image_path, frame_path)
     _log("voice")
     STACK.synthesize_speech(
         package["script"],
@@ -75,8 +98,8 @@ def run_private_smoke() -> dict:
         "Voz documental sobria, intrigante y natural en espanol rioplatense. Ritmo medio, diccion clara, sin dramatizacion excesiva.",
     )
     _log("render")
-    _render_video(image_path, audio_path, video_path)
-    _make_thumbnail(image_path, package["thumbnail_text"], thumb_path)
+    _render_video(frame_path, audio_path, video_path)
+    _make_thumbnail(frame_path, package["thumbnail_text"], thumb_path)
 
     description = (
         "PRUEBA TECNICA PRIVADA de YouTube AI Studio para Archivo insolito.\n\n"
