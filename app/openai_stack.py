@@ -79,14 +79,60 @@ class OpenAIStack:
             raise RuntimeError("OPENAI_API_KEY is not configured")
         return {"Authorization": f"Bearer {self.api_key}"}
 
-    def generate_editorial_package(self, channel: dict, topic: str) -> dict:
-        instructions = (
-            "Sos el editor principal de un canal de YouTube en espanol. "
-            "El contenido debe ser original, sustantivo, apto para monetizacion y no repetitivo. "
-            "Evita relleno, afirmaciones no verificables y citas inventadas. "
-            "Devuelve EXCLUSIVAMENTE JSON valido."
+    def _response_json(self, instructions: str, prompt: str, max_output_tokens: int) -> dict:
+        response = httpx.post(
+            f"{self.base_url}/responses",
+            headers={**self._headers(), "Content-Type": "application/json"},
+            json={
+                "model": self.text_model,
+                "instructions": instructions,
+                "input": prompt,
+                "max_output_tokens": max_output_tokens,
+                "store": False,
+                "text": {"verbosity": "medium"},
+            },
+            timeout=self.timeout,
         )
-        prompt = f"""
+        response.raise_for_status()
+        return _json_from_text(_extract_output_text(response.json()))
+
+    def generate_smoke_package(self, channel: dict) -> dict:
+        package = self._response_json(
+            instructions=(
+                "Sos editor de un canal de YouTube en espanol. Esta es una prueba tecnica privada. "
+                "No incluyas hechos historicos, datos externos, citas, fechas ni afirmaciones verificables. "
+                "El texto debe ser original. Devuelve EXCLUSIVAMENTE JSON valido."
+            ),
+            prompt=f"""
+Canal: {channel['name']}
+Propuesta: {channel['tagline']}
+Tono: {channel['voice']}
+Estilo visual: {channel['visual']}
+
+Genera exactamente estas claves:
+- title: titulo breve para una PRUEBA PRIVADA, maximo 80 caracteres.
+- script: 90 a 130 palabras presentando el espiritu del canal sin contar ningun hecho real concreto.
+- thumbnail_text: 2 a 4 palabras.
+- image_prompt: una escena cinematografica 16:9 sin texto, con archivo documental, tecnologia y misterio sobrio; sin logos ni marcas.
+""",
+            max_output_tokens=900,
+        )
+        required = {"title", "script", "thumbnail_text", "image_prompt"}
+        missing = required - set(package)
+        if missing:
+            raise RuntimeError(f"Smoke package missing fields: {sorted(missing)}")
+        package["mode"] = "openai-smoke"
+        return package
+
+    def generate_editorial_package(self, channel: dict, topic: str) -> dict:
+        package = self._response_json(
+            instructions=(
+                "Sos el editor principal de un canal de YouTube en espanol. "
+                "El contenido debe ser original, sustantivo, apto para monetizacion y no repetitivo. "
+                "Evita relleno, afirmaciones no verificables y citas inventadas. "
+                "Devuelve EXCLUSIVAMENTE JSON valido."
+            ),
+            prompt=f"""
 Canal: {channel['name']}
 Propuesta: {channel['tagline']}
 Idioma: {channel['language']}
@@ -110,22 +156,9 @@ Genera un paquete editorial con estas claves:
 - thumbnail_text: entre 2 y 5 palabras.
 - factual: booleano.
 - fact_check_notes: lista de afirmaciones que deben verificarse antes de publicar; vacia si es ficcion.
-"""
-        response = httpx.post(
-            f"{self.base_url}/responses",
-            headers={**self._headers(), "Content-Type": "application/json"},
-            json={
-                "model": self.text_model,
-                "instructions": instructions,
-                "input": prompt,
-                "max_output_tokens": 7000,
-                "store": False,
-                "text": {"verbosity": "medium"},
-            },
-            timeout=self.timeout,
+""",
+            max_output_tokens=7000,
         )
-        response.raise_for_status()
-        package = _json_from_text(_extract_output_text(response.json()))
         required = {"title", "description", "script", "short_script", "visual_prompts", "short_visual_prompts"}
         missing = required - set(package)
         if missing:
