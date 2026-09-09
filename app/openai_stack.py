@@ -68,6 +68,7 @@ class OpenAIStack:
         self.tts_voice = os.getenv("OPENAI_TTS_VOICE", "marin")
         self.image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2")
         self.image_size = os.getenv("OPENAI_IMAGE_SIZE", "1536x1024")
+        self.image_quality = os.getenv("OPENAI_IMAGE_QUALITY", "medium")
         self.timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "180"))
 
     @property
@@ -122,6 +123,61 @@ Genera exactamente estas claves:
         if missing:
             raise RuntimeError(f"Smoke package missing fields: {sorted(missing)}")
         package["mode"] = "openai-smoke"
+        return package
+
+    def generate_sourced_episode(self, channel: dict, topic: str, approved_facts: str, scene_count: int = 5) -> dict:
+        package = self._response_json(
+            instructions=(
+                "Sos el guionista principal de un canal documental de YouTube en espanol rioplatense. "
+                "Trabajas con un brief factual cerrado. Usa solamente los hechos incluidos en el brief para afirmaciones concretas. "
+                "No agregues cifras, fechas, nombres, causas, citas ni detalles tecnicos que no esten en el brief. "
+                "No inventes citas. Distingui hechos de interpretacion. Escribi con ritmo narrativo, sobrio e intrigante. "
+                "Cada escena debe aportar informacion nueva. Devuelve EXCLUSIVAMENTE JSON valido."
+            ),
+            prompt=f"""
+CANAL
+Nombre: {channel['name']}
+Propuesta: {channel['tagline']}
+Tono: {channel['voice']}
+Visual: {channel['visual']}
+Reglas: {', '.join(channel['safety'])}
+
+TEMA
+{topic}
+
+BRIEF FACTUAL APROBADO
+{approved_facts}
+
+OBJETIVO
+Genera un episodio documental de 7 a 10 minutos, original y apto para YouTube. El eje editorial debe mostrar como una incompatibilidad aparentemente pequena puede transformarse en una falla sistemica cuando interfaces, validacion y comunicacion no detectan el problema.
+
+Devuelve exactamente estas claves:
+- title: titulo atractivo, preciso, maximo 85 caracteres.
+- description_intro: dos parrafos breves para la descripcion, sin URLs.
+- thumbnail_text: 2 a 5 palabras, fuerte y legible.
+- tags: lista de 8 a 12 etiquetas.
+- short_title: titulo para un Short derivado.
+- short_script: 100 a 140 palabras, autosuficiente.
+- scenes: lista de exactamente {scene_count} objetos. Cada objeto debe tener:
+  - heading: titulo interno de escena, 2 a 6 palabras.
+  - narration: 150 a 210 palabras.
+  - visual_prompt: prompt cinematografico 16:9 sin texto incrustado, sin logos, sin marcas, sin personas famosas; recreacion documental estilizada coherente con la narracion.
+
+La narracion total debe ser continua: gancho inicial, contexto, mecanismo del error, por que no fue detectado, consecuencias y leccion de ingenieria/sistemas. No uses frases de relleno ni repitas la misma idea en varias escenas.
+""",
+            max_output_tokens=6500,
+        )
+        required = {"title", "description_intro", "thumbnail_text", "tags", "short_title", "short_script", "scenes"}
+        missing = required - set(package)
+        if missing:
+            raise RuntimeError(f"Sourced episode missing fields: {sorted(missing)}")
+        scenes = package.get("scenes") or []
+        if len(scenes) != scene_count:
+            raise RuntimeError(f"Expected {scene_count} scenes, got {len(scenes)}")
+        for index, scene in enumerate(scenes, start=1):
+            if not all(key in scene for key in ("heading", "narration", "visual_prompt")):
+                raise RuntimeError(f"Scene {index} is incomplete")
+        package["mode"] = "openai-sourced"
         return package
 
     def generate_editorial_package(self, channel: dict, topic: str) -> dict:
@@ -202,12 +258,19 @@ Genera un paquete editorial con estas claves:
         concat_file.unlink(missing_ok=True)
         return str(dest)
 
-    def generate_image(self, prompt: str, dest: Path, size: str | None = None) -> str:
+    def generate_image(self, prompt: str, dest: Path, size: str | None = None, quality: str | None = None) -> str:
         dest.parent.mkdir(parents=True, exist_ok=True)
         response = httpx.post(
             f"{self.base_url}/images/generations",
             headers={**self._headers(), "Content-Type": "application/json"},
-            json={"model": self.image_model, "prompt": prompt, "size": size or self.image_size, "n": 1},
+            json={
+                "model": self.image_model,
+                "prompt": prompt,
+                "size": size or self.image_size,
+                "quality": quality or self.image_quality,
+                "output_format": "png",
+                "n": 1,
+            },
             timeout=self.timeout,
         )
         response.raise_for_status()
