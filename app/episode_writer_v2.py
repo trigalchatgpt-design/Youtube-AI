@@ -3,14 +3,23 @@ from __future__ import annotations
 from .openai_stack import STACK
 
 
-def write_episode_v2(channel: dict, topic: str, approved_facts: str, scene_count: int = 28) -> dict:
+def write_episode_v2(
+    channel: dict,
+    topic: str,
+    approved_facts: str,
+    scene_count: int = 28,
+    editorial_direction: str = "",
+) -> dict:
+    editorial_block = editorial_direction.strip() or (
+        "Explicar por que el caso importa hoy, con una tesis clara y comprensible para publico general."
+    )
     package = STACK._response_json(
         instructions=(
             "Sos guionista de divulgacion para YouTube en espanol rioplatense. El publico es general. "
             "Usa solo el brief factual para afirmaciones concretas. No inventes cifras, fechas, nombres, citas ni causas. "
             "Explica terminos tecnicos cuando aparecen por primera vez. Cada video debe tener una idea central y una definicion editorial: "
-            "ademas de informar, debe explicar que significa el caso y que aprendizaje deja. Escribi con ritmo, claridad y frases cortas. "
-            "Devuelve exclusivamente JSON valido."
+            "ademas de informar, debe explicar que significa el caso y que aprendizaje deja. Distingui con claridad hechos e interpretacion editorial. "
+            "Escribi con ritmo, claridad y frases cortas. Devuelve exclusivamente JSON valido."
         ),
         prompt=f"""
 CANAL
@@ -23,13 +32,17 @@ TEMA
 BRIEF FACTUAL APROBADO
 {approved_facts}
 
+DIRECCION EDITORIAL
+{editorial_block}
+
 FORMATO
 - Duracion objetivo: 6 a 9 minutos con voz agil.
 - Publico general: no asumir conocimientos previos.
 - Introducir definiciones simples dentro del relato.
 - Cada bloque debe responder una pregunta concreta.
-- Terminar con una tesis o definicion propia que diga por que este caso importa hoy.
-- Nada de relleno, solemnidad o frases institucionales.
+- Terminar con una tesis propia que diga por que este caso importa hoy.
+- La tesis puede interpretar los hechos, pero no debe presentar opiniones como datos historicos.
+- Nada de relleno, solemnidad, consignas partidarias o frases institucionales vacias.
 
 Devuelve estas claves:
 - title: titulo atractivo y preciso, maximo 85 caracteres.
@@ -45,7 +58,7 @@ Devuelve estas claves:
   - narration: 35 a 52 palabras.
   - visual_prompt: 16:9, sin texto, cinematografico, claro, con profundidad y elementos grandes; cada escena debe diferenciarse visualmente de la anterior.
 
-Estructura narrativa: gancho -> que paso -> definiciones necesarias -> mecanismo -> por que nadie lo vio -> consecuencia -> que cambio -> tesis final.
+Estructura narrativa: gancho -> que paso -> definiciones necesarias -> capacidades que lo hicieron posible -> decision o desafio -> resultado -> que demuestra -> tesis final.
 """,
         max_output_tokens=9000,
     )
