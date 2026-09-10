@@ -54,7 +54,7 @@ Devuelve estas claves:
 - tags: lista de 8 a 12 etiquetas.
 - short_title: titulo de Short.
 - short_script: 100 a 140 palabras.
-- scenes: exactamente {scene_count} objetos con heading, narration y visual_prompt.
+- scenes: apunta a {scene_count} objetos con heading, narration y visual_prompt; son aceptables entre 20 y 30 escenas si el relato queda mejor.
   - narration: 35 a 52 palabras.
   - visual_prompt: 16:9, sin texto, cinematografico, claro, con profundidad y elementos grandes; cada escena debe diferenciarse visualmente de la anterior.
 
@@ -67,8 +67,8 @@ Estructura narrativa: gancho -> que paso -> definiciones necesarias -> capacidad
     if missing:
         raise RuntimeError(f"V2 episode missing fields: {sorted(missing)}")
     scenes = package.get("scenes") or []
-    if len(scenes) < scene_count:
-        raise RuntimeError(f"Expected at least {scene_count} scenes, got {len(scenes)}")
-    package["scenes"] = scenes[:scene_count]
+    if not 20 <= len(scenes) <= 30:
+        raise RuntimeError(f"Expected 20 to 30 scenes, got {len(scenes)}")
+    package["scenes"] = scenes[:30]
     package["mode"] = "archivo-v2"
     return package
