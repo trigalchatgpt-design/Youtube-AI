@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
+from .argentina_opal import run_argentina_opal
 from .batch24 import run_batch24
 from .channels import CHANNELS, BREAKING_NEWS_TEMPLATE
 from .hubble_episode import run_hubble_private_episode
@@ -17,7 +18,7 @@ from .scheduler import start_scheduler
 from .smoke import run_private_smoke
 from .youtube import authorization_url, exchange_code, channel_info
 
-app = FastAPI(title="YouTube AI Studio", version="0.9.0")
+app = FastAPI(title="YouTube AI Studio", version="0.10.0")
 
 
 def _run_smoke_once():
@@ -60,6 +61,14 @@ def _run_v2_pilot_once():
         print(f"V2_ERROR {type(exc).__name__}: {exc}", flush=True)
 
 
+def _run_argentina_opal_once():
+    try:
+        result = run_argentina_opal()
+        print(f"ARG_OPAL_RESULT {result}", flush=True)
+    except Exception as exc:
+        print(f"ARG_OPAL_ERROR {type(exc).__name__}: {exc}", flush=True)
+
+
 @app.on_event("startup")
 def _startup():
     start_scheduler()
@@ -73,6 +82,8 @@ def _startup():
         threading.Thread(target=_run_batch24_once, daemon=True).start()
     if os.getenv("RUN_V2_PILOT", "").strip().lower() in {"1", "true", "yes", "on"}:
         threading.Thread(target=_run_v2_pilot_once, daemon=True).start()
+    if os.getenv("RUN_ARGENTINA_OPAL", "").strip().lower() in {"1", "true", "yes", "on"}:
+        threading.Thread(target=_run_argentina_opal_once, daemon=True).start()
 
 
 class GenerateReq(BaseModel):
@@ -81,7 +92,7 @@ class GenerateReq(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "youtube-ai-studio", "version": "0.9.0"}
+    return {"ok": True, "service": "youtube-ai-studio", "version": "0.10.0"}
 
 
 @app.get("/api/status")
@@ -156,4 +167,4 @@ def dashboard():
     status = ProviderStatus().as_dict()
     cards = "".join(f"<article><h2>{c['name']}</h2><p>{c['tagline']}</p><code>{c['id']}</code></article>" for c in CHANNELS)
     oauth = "<a href='/oauth/youtube/start'>Conectar YouTube</a>" if status['youtube_oauth_configured'] and not status['youtube_connected'] else ("YouTube conectado" if status['youtube_connected'] else "Faltan credenciales OAuth de Google")
-    return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>YouTube AI Studio</title><style>body{{font-family:system-ui;background:#111;color:#eee;max-width:1050px;margin:40px auto;padding:0 20px}}a{{color:#8ec5ff}}section{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}}article{{border:1px solid #444;border-radius:18px;padding:20px;background:#181818}}code{{background:#262626;padding:4px 7px;border-radius:6px}}.box{{margin:24px 0;padding:16px;background:#181818;border-radius:14px}}</style></head><body><h1>YouTube AI Studio</h1><p>Orquestador V0.9</p><div class='box'><strong>Estado:</strong><pre>{status}</pre><p>{oauth}</p></div><section>{cards}</section><div class='box'><strong>Contexto Ahora</strong><p>Desactivado hasta conectar fuentes en tiempo real y doble verificacion.</p></div></body></html>"""
+    return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>YouTube AI Studio</title><style>body{{font-family:system-ui;background:#111;color:#eee;max-width:1050px;margin:40px auto;padding:0 20px}}a{{color:#8ec5ff}}section{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}}article{{border:1px solid #444;border-radius:18px;padding:20px;background:#181818}}code{{background:#262626;padding:4px 7px;border-radius:6px}}.box{{margin:24px 0;padding:16px;background:#181818;border-radius:14px}}</style></head><body><h1>YouTube AI Studio</h1><p>Orquestador V0.10</p><div class='box'><strong>Estado:</strong><pre>{status}</pre><p>{oauth}</p></div><section>{cards}</section><div class='box'><strong>Contexto Ahora</strong><p>Desactivado hasta conectar fuentes en tiempo real y doble verificacion.</p></div></body></html>"""
